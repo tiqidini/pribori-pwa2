@@ -1,5 +1,5 @@
 // service-worker.js
-const CACHE_NAME = 'pribori-react-cache-v1'; // Updated cache name
+const CACHE_NAME = 'pribori-react-cache-v2'; // Updated cache name to force update
 
 // List of URLs to cache.
 // Ensure these paths are correct relative to where service-worker.js is served from (usually the root).
