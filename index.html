@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#3a86ff" />
-    <title>Список Приладів (React) | Premium Edition</title>
+    <title>Антени та Імпульси | Premium Edition</title>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="img/icon-192x192.png">
     <link rel="icon" type="image/png" sizes="32x32" href="img/favicon-32x32.png">
@@ -435,7 +435,7 @@
                                 <i className="fas fa-microchip text-white text-xl"></i>
                             </div>
                             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-800">
-                                <span className="text-premium-600 font-extrabold">Pribori</span> Admin
+                                <span className="text-premium-600 font-extrabold">Антени</span> та Імпульси
                             </h1>
                         </div>
                         <div className="flex items-center gap-2 sm:gap-4">
@@ -626,12 +626,12 @@
                                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                                     Наступна повірка
                                 </div>
-                                <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${device.isUnfit ? 'badge-unfit' : (nextCheckStatus.isExpired ? 'badge-expired' : (nextCheckStatus.isWarning ? 'badge-warning' : 'bg-slate-100 text-slate-600'))}`}>
-                                    {device.isUnfit ? 'ЗНЯТО З ОБЛІКУ' : nextCheckStatus.text}
+                                <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${(device.isUnfit || device.isNotTracked) ? 'badge-unfit' : (nextCheckStatus.isExpired ? 'badge-expired' : (nextCheckStatus.isWarning ? 'badge-warning' : 'bg-slate-100 text-slate-600'))}`}>
+                                    {device.isUnfit ? 'ПЛАНУЄТЬСЯ СПИСАННЯ' : (device.isNotTracked ? 'НЕ ВІДСТЕЖУЄТЬСЯ' : nextCheckStatus.text)}
                                 </div>
                             </div>
 
-                            {!device.isUnfit && (timeline.percent > 0 || timeline.timelineClassName === 'timeline-expired') && (
+                            {!device.isUnfit && !device.isNotTracked && (timeline.percent > 0 || timeline.timelineClassName === 'timeline-expired') && (
                                 <div className="space-y-1" title={`${timeline.percent}% терміну пройшло`}>
                                     <div className="progress-bar-container">
                                         <div
@@ -703,18 +703,17 @@
         // DeviceModal Component
         function DeviceModal({ device, onClose, onSave, onDelete }) {
             const [formData, setFormData] = useState({
-                id: '', rm: '', name: '', type: '', serial: '',
                 lastCheckDate: '', mpi: '', location: '', povirkyLocation: '', notes: '',
-                isUnfit: false
+                isUnfit: false, isNotTracked: false
             });
             useEffect(() => {
                 if (device) {
-                    setFormData({ ...device, mpi: device.mpi || '', lastCheckDate: device.lastCheckDate || '', isUnfit: device.isUnfit || false });
+                    setFormData({ ...device, mpi: device.mpi || '', lastCheckDate: device.lastCheckDate || '', isUnfit: device.isUnfit || false, isNotTracked: device.isNotTracked || false });
                 } else {
                     setFormData({
                         id: '', rm: '', name: '', type: '', serial: '',
                         lastCheckDate: '', mpi: '', location: '', povirkyLocation: '', notes: '',
-                        isUnfit: false
+                        isUnfit: false, isNotTracked: false
                     });
                 }
             }, [device]);
@@ -788,7 +787,7 @@
                                 <label htmlFor="device-povirkyLocation" className={labelClass}>Організація повірки</label>
                                 <input type="text" name="povirkyLocation" id="device-povirkyLocation" value={formData.povirkyLocation} onChange={handleChange} className={inputClass} />
                             </div>
-                            <div>
+                            <div className="space-y-3">
                                 <label className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-100/50 transition-all">
                                     <input
                                         type="checkbox"
@@ -798,8 +797,22 @@
                                         className="w-6 h-6 text-slate-800 rounded-lg focus:ring-slate-100 border-slate-300"
                                     />
                                     <div>
-                                        <span className="block text-sm font-bold text-slate-800">Виписано сповіщення про непридатність</span>
-                                        <span className="block text-[10px] text-slate-500 font-medium">Прилад буде виключено з лічильника прострочених та позначено як непридатний.</span>
+                                        <span className="block text-sm font-bold text-slate-800">Планується списання</span>
+                                        <span className="block text-[10px] text-slate-500 font-medium">Прилад буде виключено з лічильника та переміщено в кінець списку.</span>
+                                    </div>
+                                </label>
+
+                                <label className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-100/50 transition-all">
+                                    <input
+                                        type="checkbox"
+                                        name="isNotTracked"
+                                        checked={formData.isNotTracked}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, isNotTracked: e.target.checked }))}
+                                        className="w-6 h-6 text-slate-800 rounded-lg focus:ring-slate-100 border-slate-300"
+                                    />
+                                    <div>
+                                        <span className="block text-sm font-bold text-slate-800">Не відстежувати</span>
+                                        <span className="block text-[10px] text-slate-500 font-medium">Приховати прогрес повірки та перемістити в кінець списку.</span>
                                     </div>
                                 </label>
                             </div>
@@ -861,7 +874,7 @@
 
                 if (Notification.permission === 'granted') {
                     new Notification('Тестове сповіщення 🧪', {
-                        body: 'Це перевірка роботи сповіщень у додатку Pribori Admin. Все працює чудово!',
+                        body: 'Це перевірка роботи сповіщень від системи "Антени та Імпульси". Все працює чудово!',
                         icon: 'img/С9-9.png'
                     });
                 } else {
@@ -1107,6 +1120,12 @@
                     );
                 }
                 return devicesToDisplay.sort((a, b) => {
+                    // Unfit and NotTracked devices to the bottom
+                    const isAInactive = a.isUnfit || a.isNotTracked;
+                    const isBInactive = b.isUnfit || b.isNotTracked;
+                    if (isAInactive && !isBInactive) return 1;
+                    if (!isAInactive && isBInactive) return -1;
+
                     const statusA = getNextCheckDateStatus(calculateNextCheckDate(a.lastCheckDate, a.mpi));
                     const statusB = getNextCheckDateStatus(calculateNextCheckDate(b.lastCheckDate, b.mpi));
                     if (statusB.sortPriority !== statusA.sortPriority) {
@@ -1174,7 +1193,7 @@
 
             const overdueCount = useMemo(() => {
                 return allDevices.filter(device => {
-                    if (device.isUnfit) return false;
+                    if (device.isUnfit || device.isNotTracked) return false;
                     if (!settings.enabledRMs.includes(device.rm)) return false;
                     const nextCheck = calculateNextCheckDate(device.lastCheckDate, device.mpi);
                     const status = getNextCheckDateStatus(nextCheck);
@@ -1196,7 +1215,7 @@
                 // Only trigger if count increased AND we have already initialized (prev > 0 or after first run)
                 if (!isLoading && overdueCount > prevOverdueCountRef.current && ('Notification' in window) && Notification.permission === 'granted') {
                     new Notification("Увага! Прострочена повірка", {
-                        body: `Знайдено ${overdueCount} приладів з простроченою повіркою.`,
+                        body: `Знайдено ${overdueCount} приладів з простроченою повіркою у системі "Антени та Імпульси".`,
                         icon: 'img/icon-192x192.png'
                     });
                 }
@@ -1351,7 +1370,7 @@
 
                     <footer className="mt-20 py-10 border-t border-slate-200 relative z-10 bg-white/30 backdrop-blur-sm">
                         <div className="container mx-auto px-6 text-center">
-                            <p className="text-sm text-slate-400 font-bold tracking-widest uppercase mb-2">Pribori Admin v2.0</p>
+                            <p className="text-sm text-slate-400 font-bold tracking-widest uppercase mb-2">Антени та Імпульси v2.1</p>
                             <p className="text-xs text-slate-400 font-medium">© 2026 Всі права захищені. Створено з любов'ю до деталей.</p>
                         </div>
                     </footer>
