@@ -1,5 +1,4 @@
-// service-worker.js
-const CACHE_NAME = 'pribori-react-cache-v2'; // Updated cache name to force update
+const CACHE_NAME = 'pribori-react-cache-v3'; // Updated cache name for icons and features
 
 // List of URLs to cache.
 // Ensure these paths are correct relative to where service-worker.js is served from (usually the root).
@@ -38,9 +37,9 @@ self.addEventListener('install', event => {
             console.error(`Service Worker (${CACHE_NAME}): Failed to cache some URLs during install:`, error);
             // Log which URLs failed
             urlsToCache.forEach(url => {
-                cache.match(url).then(response => {
-                    if (!response) console.error(`Failed to cache: ${url}`);
-                });
+              cache.match(url).then(response => {
+                if (!response) console.error(`Failed to cache: ${url}`);
+              });
             });
           });
       })
@@ -49,7 +48,7 @@ self.addEventListener('install', event => {
         return self.skipWaiting(); // Activate new SW immediately
       })
       .catch(error => {
-         console.error(`Service Worker (${CACHE_NAME}): Failed to cache files during install:`, error);
+        console.error(`Service Worker (${CACHE_NAME}): Failed to cache files during install:`, error);
       })
   );
 });
@@ -127,10 +126,10 @@ self.addEventListener('fetch', event => {
             return networkResponse;
           }
         ).catch(error => {
-            console.warn(`SW (${CACHE_NAME}): Fetch failed for ${event.request.url}. Maybe offline?`, error);
-            // Optionally, return a fallback page/image if appropriate
-            // For example, if (event.request.destination === 'image') return caches.match('/offline-image.png');
-            throw error;
+          console.warn(`SW (${CACHE_NAME}): Fetch failed for ${event.request.url}. Maybe offline?`, error);
+          // Optionally, return a fallback page/image if appropriate
+          // For example, if (event.request.destination === 'image') return caches.match('/offline-image.png');
+          throw error;
         });
       })
   );
