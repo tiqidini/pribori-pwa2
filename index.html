@@ -597,8 +597,13 @@
 
                             <div className="w-20 h-20 flex-shrink-0 relative">
                                 {device.isUnfit && (
-                                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-bold badge-unfit uppercase tracking-tighter z-10 shadow-lg">
-                                        НЕПРИДАТНИЙ
+                                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold badge-unfit uppercase tracking-tighter z-10 shadow-lg whitespace-nowrap overflow-hidden text-ellipsis max-w-[calc(100%-16px)]">
+                                        СПИСАННЯ
+                                    </div>
+                                )}
+                                {device.isNotTracked && !device.isUnfit && (
+                                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[8px] sm:text-[9px] font-bold bg-slate-400 text-white uppercase tracking-tighter z-10 shadow-lg">
+                                        АРХІВ
                                     </div>
                                 )}
                                 <div
@@ -626,10 +631,19 @@
                                 <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
                                     Наступна повірка
                                 </div>
-                                <div className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${(device.isUnfit || device.isNotTracked) ? 'badge-unfit' : (nextCheckStatus.isExpired ? 'badge-expired' : (nextCheckStatus.isWarning ? 'badge-warning' : 'bg-slate-100 text-slate-600'))}`}>
+                                <div className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold ${(device.isUnfit || device.isNotTracked) ? 'badge-unfit' : (nextCheckStatus.isExpired ? 'badge-expired' : (nextCheckStatus.isWarning ? 'badge-warning' : 'bg-slate-100 text-slate-600'))} whitespace-nowrap`}>
                                     {device.isUnfit ? 'ПЛАНУЄТЬСЯ СПИСАННЯ' : (device.isNotTracked ? 'НЕ ВІДСТЕЖУЄТЬСЯ' : nextCheckStatus.text)}
                                 </div>
                             </div>
+
+                            {device.techChar && (
+                                <div className="mb-4 p-2 bg-slate-50/50 rounded-xl border border-slate-100/50">
+                                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-1">Технічні характеристики</div>
+                                    <div className="text-[11px] text-slate-600 font-medium leading-tight line-clamp-2" title={device.techChar}>
+                                        {device.techChar}
+                                    </div>
+                                </div>
+                            )}
 
                             {!device.isUnfit && !device.isNotTracked && (timeline.percent > 0 || timeline.timelineClassName === 'timeline-expired') && (
                                 <div className="space-y-1" title={`${timeline.percent}% терміну пройшло`}>
@@ -703,16 +717,24 @@
         // DeviceModal Component
         function DeviceModal({ device, onClose, onSave, onDelete }) {
             const [formData, setFormData] = useState({
-                lastCheckDate: '', mpi: '', location: '', povirkyLocation: '', notes: '',
+                id: '', rm: '', name: '', type: '', serial: '',
+                lastCheckDate: '', mpi: '', location: '', povirkyLocation: '', notes: '', techChar: '',
                 isUnfit: false, isNotTracked: false
             });
             useEffect(() => {
                 if (device) {
-                    setFormData({ ...device, mpi: device.mpi || '', lastCheckDate: device.lastCheckDate || '', isUnfit: device.isUnfit || false, isNotTracked: device.isNotTracked || false });
+                    setFormData({
+                        ...device,
+                        mpi: device.mpi || '',
+                        lastCheckDate: device.lastCheckDate || '',
+                        isUnfit: device.isUnfit || false,
+                        isNotTracked: device.isNotTracked || false,
+                        techChar: device.techChar || ''
+                    });
                 } else {
                     setFormData({
                         id: '', rm: '', name: '', type: '', serial: '',
-                        lastCheckDate: '', mpi: '', location: '', povirkyLocation: '', notes: '',
+                        lastCheckDate: '', mpi: '', location: '', povirkyLocation: '', notes: '', techChar: '',
                         isUnfit: false, isNotTracked: false
                     });
                 }
@@ -786,6 +808,18 @@
                             <div>
                                 <label htmlFor="device-povirkyLocation" className={labelClass}>Організація повірки</label>
                                 <input type="text" name="povirkyLocation" id="device-povirkyLocation" value={formData.povirkyLocation} onChange={handleChange} className={inputClass} />
+                            </div>
+                            <div>
+                                <label htmlFor="device-techChar" className={labelClass}>Технічні характеристики</label>
+                                <input
+                                    type="text"
+                                    name="techChar"
+                                    id="device-techChar"
+                                    value={formData.techChar}
+                                    onChange={handleChange}
+                                    className={inputClass}
+                                    placeholder="Діапазон, точність, потужність..."
+                                />
                             </div>
                             <div className="space-y-3">
                                 <label className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-100/50 transition-all">
@@ -1197,7 +1231,7 @@
                     if (!settings.enabledRMs.includes(device.rm)) return false;
                     const nextCheck = calculateNextCheckDate(device.lastCheckDate, device.mpi);
                     const status = getNextCheckDateStatus(nextCheck);
-                    return status.isExpired;
+                    return status.isExpired || status.isWarning;
                 }).length;
             }, [allDevices, settings.enabledRMs]);
 
@@ -1214,8 +1248,8 @@
                 // Browser Push Notification
                 // Only trigger if count increased AND we have already initialized (prev > 0 or after first run)
                 if (!isLoading && overdueCount > prevOverdueCountRef.current && ('Notification' in window) && Notification.permission === 'granted') {
-                    new Notification("Увага! Прострочена повірка", {
-                        body: `Знайдено ${overdueCount} приладів з простроченою повіркою у системі "Антени та Імпульси".`,
+                    new Notification("Потребує уваги 🔔", {
+                        body: `Знайдено ${overdueCount} приладів, що потребують повірки або уваги у системі "Антени та Імпульси".`,
                         icon: 'img/icon-192x192.png'
                     });
                 }
