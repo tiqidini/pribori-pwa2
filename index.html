@@ -876,7 +876,7 @@
         }
 
         // SettingsModal Component
-        function SettingsModal({ onClose, settings, onSaveSettings }) {
+        function SettingsModal({ onClose, settings, onSaveSettings, onGitHubPush, onGitHubPull }) {
             const [localSettings, setLocalSettings] = useState(settings);
             const rms = ["111", "112"];
 
@@ -962,6 +962,51 @@
                                             </div>
                                         </label>
                                     ))}
+                                </div>
+                            </section>
+
+                            <section>
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Синхронізація (GitHub)</h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">GitHub Personal Access Token</label>
+                                        <input
+                                            type="password"
+                                            value={localSettings.githubToken}
+                                            onChange={(e) => setLocalSettings(prev => ({ ...prev, githubToken: e.target.value }))}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-premium-100 outline-none transition-all text-sm"
+                                            placeholder="ghp_xxxxxxxxxxxx"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Репозиторій (user/repo)</label>
+                                        <input
+                                            type="text"
+                                            value={localSettings.githubRepo}
+                                            onChange={(e) => setLocalSettings(prev => ({ ...prev, githubRepo: e.target.value }))}
+                                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-premium-100 outline-none transition-all text-sm"
+                                            placeholder="username/pribori-data"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => onGitHubPull(localSettings)}
+                                            className="flex-1 bg-sky-50 text-sky-600 hover:bg-sky-100 font-bold py-3 rounded-2xl transition-all text-xs flex items-center justify-center gap-2"
+                                        >
+                                            <i className="fas fa-cloud-download-alt"></i> Завантажити
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => onGitHubPush(localSettings)}
+                                            className="flex-1 bg-premium-50 text-premium-600 hover:bg-premium-100 font-bold py-3 rounded-2xl transition-all text-xs flex items-center justify-center gap-2"
+                                        >
+                                            <i className="fas fa-cloud-upload-alt"></i> Вивантажити
+                                        </button>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 leading-tight">
+                                        Дані будуть збережені у файлі `{localSettings.githubPath}` у вашому репозиторії.
+                                    </p>
                                 </div>
                             </section>
 
@@ -1090,7 +1135,13 @@
             const [zoomedImageUrl, setZoomedImageUrl] = useState(null);
             const [settings, setSettings] = useState(() => {
                 const saved = localStorage.getItem('pribori_settings');
-                return saved ? JSON.parse(saved) : { enabledRMs: ["111", "112"] };
+                const defaultSettings = {
+                    enabledRMs: ["111", "112"],
+                    githubToken: '',
+                    githubRepo: '',
+                    githubPath: 'devices_backup.json'
+                };
+                return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
             });
             const fileInputRef = useRef(null);
             const prevOverdueCountRef = useRef(0);
@@ -1375,6 +1426,104 @@
                 reader.readAsText(file);
             };
 
+            const handleGitHubPush = async (currentSettings) => {
+                const { githubToken, githubRepo, githubPath } = currentSettings;
+                if (!githubToken || !githubRepo) {
+                    alert("Будь ласка, заповніть GitHub Token та Репозиторій у налаштуваннях.");
+                    return;
+                }
+
+                try {
+                    const devicesToExport = await getAllDevicesDB();
+                    const jsonData = JSON.stringify(devicesToExport, null, 2);
+                    const encodedData = btoa(unescape(encodeURIComponent(jsonData)));
+
+                    // 1. Get current file sha if exists
+                    let sha = null;
+                    try {
+                        const getRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
+                            headers: { 'Authorization': `token ${githubToken}` }
+                        });
+                        if (getRes.ok) {
+                            const fileData = await getRes.json();
+                            sha = fileData.sha;
+                        }
+                    } catch (e) {
+                        console.log("File might not exist yet, ignoring SHA.");
+                    }
+
+                    // 2. Upload/Update file
+                    const putRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${githubToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `📱 Синхронізація: оновлення даних приладів (${new Date().toLocaleString()})`,
+                            content: encodedData,
+                            sha: sha || undefined
+                        })
+                    });
+
+                    if (putRes.ok) {
+                        alert("Дані успішно відправлені в GitHub!");
+                    } else {
+                        const errData = await putRes.json();
+                        throw new Error(errData.message || "Невідома помилка при завантаженні.");
+                    }
+                } catch (error) {
+                    console.error("GitHub Push Error:", error);
+                    alert(`Помилка вивантаження: ${error.message}`);
+                }
+            };
+
+            const handleGitHubPull = async (currentSettings) => {
+                const { githubToken, githubRepo, githubPath } = currentSettings;
+                if (!githubToken || !githubRepo) {
+                    alert("Будь ласка, заповніть GitHub Token та Репозиторій у налаштуваннях.");
+                    return;
+                }
+
+                if (!window.confirm("УВАГА! Завантаження з хмари замінить усі поточні локальні дані. Продовжити?")) {
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
+                        headers: { 'Authorization': `token ${githubToken}` }
+                    });
+
+                    if (!res.ok) {
+                        if (res.status === 404) throw new Error("Файл не знайдено в репозиторії.");
+                        const errData = await res.json();
+                        throw new Error(errData.message || "Помилка при завантаженні з GitHub.");
+                    }
+
+                    const fileData = await res.json();
+                    const jsonData = decodeURIComponent(escape(atob(fileData.content)));
+                    const importedDevices = JSON.parse(jsonData);
+
+                    if (!Array.isArray(importedDevices)) {
+                        throw new Error("Невірний формат даних у файлі GitHub.");
+                    }
+
+                    for (const device of importedDevices) {
+                        device.nextCheckDate = calculateNextCheckDate(device.lastCheckDate, device.mpi);
+                    }
+
+                    await clearAllDevicesDB();
+                    for (const device of importedDevices) {
+                        await saveDeviceDB(device);
+                    }
+                    await loadDevices();
+                    alert(`Синхронізація успішна! Завантажено ${importedDevices.length} прилад(ів).`);
+                } catch (error) {
+                    console.error("GitHub Pull Error:", error);
+                    alert(`Помилка завантаження: ${error.message}`);
+                }
+            };
+
             const triggerImportFileSelect = () => {
                 if (fileInputRef.current) {
                     fileInputRef.current.click();
@@ -1474,6 +1623,8 @@
                             settings={settings}
                             onClose={() => setIsSettingsOpen(false)}
                             onSaveSettings={handleSaveSettings}
+                            onGitHubPush={handleGitHubPush}
+                            onGitHubPull={handleGitHubPull}
                         />
                     )}
                 </div>
