@@ -139,9 +139,9 @@
         }
 
         .badge-unfit {
-            background: linear-gradient(135deg, #475569, #1e293b);
+            background: linear-gradient(135deg, #f59e0b, #b45309);
             color: white !important;
-            box-shadow: 0 4px 15px rgba(30, 41, 59, 0.3);
+            box-shadow: 0 4px 15px rgba(180, 83, 9, 0.3);
         }
 
         .notification-area-glass {
@@ -1460,11 +1460,12 @@
                     const jsonData = JSON.stringify(devicesToExport, null, 2);
                     const encodedData = btoa(unescape(encodeURIComponent(jsonData)));
 
-                    // 1. Get current file sha if exists
+                    // 1. Get current file sha using cache buster to avoid stale SHA errors
                     let sha = null;
                     try {
-                        const getRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
-                            headers: { 'Authorization': `Bearer ${githubToken}` }
+                        const getRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}?t=${Date.now()}`, {
+                            headers: { 'Authorization': `Bearer ${githubToken}` },
+                            cache: 'no-store'
                         });
                         if (getRes.ok) {
                             const fileData = await getRes.json();
