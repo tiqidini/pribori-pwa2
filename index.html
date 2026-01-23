@@ -942,7 +942,8 @@
                                     <i className="fas fa-vial"></i> Тестове сповіщення
                                 </button>
                                 <p className="mt-3 text-[11px] text-slate-400 leading-relaxed font-medium">
-                                    Увімкніть, щоб отримувати сповіщення про необхідність повірки в системній шторці.
+                                    Увімкніть, щоб отримувати сповіщення в системній шторці. <br />
+                                    <b>Щоденне нагадування:</b> Система автоматично перевірятиме прилади у фоновому режимі (раз на добу) та нагадуватиме про необхідність повірки.
                                 </p>
                             </section>
 
@@ -1600,7 +1601,7 @@
 
                     <footer className="mt-20 py-10 border-t border-slate-200 relative z-10 bg-white/30 backdrop-blur-sm">
                         <div className="container mx-auto px-6 text-center">
-                            <p className="text-sm text-slate-400 font-bold tracking-widest uppercase mb-2">Антени та Імпульси v2.1</p>
+                            <p className="text-sm text-slate-400 font-bold tracking-widest uppercase mb-2">Антени та Імпульси v2.2</p>
                             <p className="text-xs text-slate-400 font-medium">© 2026 Всі права захищені. Створено з любов'ю до деталей.</p>
                         </div>
                     </footer>
@@ -1638,7 +1639,26 @@
             const swPath = 'service-worker.js';
             const swScope = './';
             navigator.serviceWorker.register(swPath, { scope: swScope })
-                .then(registration => {
+                .then(async registration => {
+                    // Periodic Background Sync registration
+                    if ('periodicSync' in registration) {
+                        try {
+                            const status = await navigator.permissions.query({
+                                name: 'periodic-background-sync',
+                            });
+                            if (status.state === 'granted') {
+                                await registration.periodicSync.register('daily-check', {
+                                    minInterval: 24 * 60 * 60 * 1000, // Once a day
+                                });
+                                console.log('Periodic Sync registered: daily-check');
+                            } else {
+                                console.log('Periodic Sync permission not granted.');
+                            }
+                        } catch (error) {
+                            console.error('Periodic Sync registration failed:', error);
+                        }
+                    }
+
                     registration.onupdatefound = () => {
                         const installingWorker = registration.installing;
                         if (installingWorker) {

@@ -134,3 +134,75 @@ self.addEventListener('fetch', event => {
       })
   );
 });
+// --- Background Sync and Periodic Sync ---
+
+const STORE_NAME = 'devices';
+const DB_NAME = 'priboriReactDB';
+
+async function getOverdueCountOffline() {
+  return new Promise((resolve) => {
+    const request = indexedDB.open(DB_NAME);
+    request.onerror = () => resolve(0);
+    request.onsuccess = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        resolve(0);
+        return;
+      }
+      const transaction = db.transaction(STORE_NAME, 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const getAllRequest = store.getAll();
+
+      getAllRequest.onsuccess = () => {
+        const devices = getAllRequest.result || [];
+        const now = new Date();
+        const thirtyDaysAhead = new Date();
+        thirtyDaysAhead.setDate(now.getDate() + 30);
+
+        const count = devices.filter(device => {
+          if (device.isUnfit || device.isNotTracked) return false;
+
+          // Basic date calculation logic (duplicated for SW)
+          if (!device.lastCheckDate || !device.mpi) return false;
+          const lastDate = new Date(device.lastCheckDate);
+          const nextDate = new Date(lastDate);
+          nextDate.setFullYear(lastDate.getFullYear() + parseInt(device.mpi));
+
+          return nextDate <= thirtyDaysAhead; // Warning or Expired
+        }).length;
+        resolve(count);
+      };
+      getAllRequest.onerror = () => resolve(0);
+    };
+  });
+}
+
+self.addEventListener('periodicsync', event => {
+  if (event.tag === 'daily-check') {
+    event.waitUntil(
+      getOverdueCountOffline().then(count => {
+        if (count > 0) {
+          return self.registration.showNotification('Антени та Імпульси 🔔', {
+            body: `Нагадування: ${count} прилад(ів) потребують уваги або повірки!`,
+            icon: './img/icon-192x192.png',
+            badge: './img/favicon-32x32.png',
+            tag: 'overdue-reminder',
+            renotify: true
+          });
+        }
+      })
+    );
+  }
+});
+
+// Also check on push if push is ever implemented
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || 'Потребує уваги 🔔';
+  const options = {
+    body: data.body || 'У вашій системі є прилади, що потребують повірки.',
+    icon: './img/icon-192x192.png',
+    badge: './img/favicon-32x32.png',
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
