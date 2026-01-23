@@ -989,6 +989,10 @@
                                             placeholder="username/pribori-data"
                                         />
                                     </div>
+                                    <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-[10px] text-amber-700 leading-tight">
+                                        <i className="fas fa-info-circle mr-1"></i>
+                                        <b>Помилка 403/404?</b> Перевірте, що токен має права <b>Contents (Read/Write)</b>. Для Classic-токенів потрібен scope <b>repo</b>.
+                                    </div>
                                     <div className="flex gap-3">
                                         <button
                                             type="button"
@@ -1191,6 +1195,13 @@
             useEffect(() => {
                 const updateTechChars = async () => {
                     await loadDevices();
+
+                    // Auto-pull from GitHub on startup
+                    if (settings.githubToken && settings.githubRepo) {
+                        console.log("App startup: attempting GitHub synchronization...");
+                        handleGitHubPull(settings, true);
+                    }
+
                     const devs = await getAllDevicesDB();
                     const techCharsMap = {
                         'В3-41': '0.3 мВ - 300 В; 20 Гц - 10 МГц; похибка ±2.5-4%.',
@@ -1301,6 +1312,11 @@
                     await saveDeviceDB(deviceToSave);
                     await loadDevices();
                     handleCloseModal();
+
+                    // Auto-sync to GitHub
+                    if (settings.githubToken && settings.githubRepo) {
+                        handleGitHubPush(settings, true);
+                    }
                 } catch (error) {
                     console.error("Failed to save device:", error);
                     alert("Помилка збереження приладу. Перевірте консоль.");
@@ -1312,6 +1328,11 @@
                     await deleteDeviceDB(deviceId);
                     await loadDevices();
                     handleCloseModal();
+
+                    // Auto-sync to GitHub
+                    if (settings.githubToken && settings.githubRepo) {
+                        handleGitHubPush(settings, true);
+                    }
                 } catch (error) {
                     console.error("Failed to delete device:", error);
                     alert("Помилка видалення приладу. Перевірте консоль.");
@@ -1427,10 +1448,10 @@
                 reader.readAsText(file);
             };
 
-            const handleGitHubPush = async (currentSettings) => {
+            const handleGitHubPush = async (currentSettings, silent = false) => {
                 const { githubToken, githubRepo, githubPath } = currentSettings;
                 if (!githubToken || !githubRepo) {
-                    alert("Будь ласка, заповніть GitHub Token та Репозиторій у налаштуваннях.");
+                    if (!silent) alert("Будь ласка, заповніть GitHub Token та Репозиторій у налаштуваннях.");
                     return;
                 }
 
@@ -1443,21 +1464,25 @@
                     let sha = null;
                     try {
                         const getRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
-                            headers: { 'Authorization': `token ${githubToken}` }
+                            headers: { 'Authorization': `Bearer ${githubToken}` }
                         });
                         if (getRes.ok) {
                             const fileData = await getRes.json();
                             sha = fileData.sha;
+                        } else if (getRes.status === 403) {
+                            throw new Error("Доступ заборонено (403). Перевірте Scopes токена (потрібно 'repo' або 'public_repo').");
+                        } else if (getRes.status === 404) {
+                            console.log("File not found, creating new one.");
                         }
                     } catch (e) {
-                        console.log("File might not exist yet, ignoring SHA.");
+                        if (e.message.includes("403")) throw e;
                     }
 
                     // 2. Upload/Update file
                     const putRes = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
                         method: 'PUT',
                         headers: {
-                            'Authorization': `token ${githubToken}`,
+                            'Authorization': `Bearer ${githubToken}`,
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
@@ -1468,35 +1493,42 @@
                     });
 
                     if (putRes.ok) {
-                        alert("Дані успішно відправлені в GitHub!");
+                        if (!silent) alert("Дані успішно відправлені в GitHub!");
+                        console.log("GitHub sync successful.");
                     } else {
                         const errData = await putRes.json();
+                        if (putRes.status === 403) {
+                            throw new Error("403: Resource not accessible by PAT. Переконайтеся, що токен має права 'write' на контент.");
+                        }
                         throw new Error(errData.message || "Невідома помилка при завантаженні.");
                     }
                 } catch (error) {
                     console.error("GitHub Push Error:", error);
-                    alert(`Помилка вивантаження: ${error.message}`);
+                    if (!silent) alert(`Помилка вивантаження: ${error.message}`);
                 }
             };
 
-            const handleGitHubPull = async (currentSettings) => {
+            const handleGitHubPull = async (currentSettings, silent = false) => {
                 const { githubToken, githubRepo, githubPath } = currentSettings;
                 if (!githubToken || !githubRepo) {
-                    alert("Будь ласка, заповніть GitHub Token та Репозиторій у налаштуваннях.");
+                    if (!silent) console.log("GitHub settings missing, skipping pull.");
                     return;
                 }
 
-                if (!window.confirm("УВАГА! Завантаження з хмари замінить усі поточні локальні дані. Продовжити?")) {
+                if (!silent && !window.confirm("УВАГА! Завантаження з хмари замінить усі поточні локальні дані. Продовжити?")) {
                     return;
                 }
 
                 try {
                     const res = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
-                        headers: { 'Authorization': `token ${githubToken}` }
+                        headers: { 'Authorization': `Bearer ${githubToken}` }
                     });
 
                     if (!res.ok) {
-                        if (res.status === 404) throw new Error("Файл не знайдено в репозиторії.");
+                        if (res.status === 404) {
+                            if (!silent) throw new Error("Файл не знайдено в репозиторії.");
+                            return;
+                        }
                         const errData = await res.json();
                         throw new Error(errData.message || "Помилка при завантаженні з GitHub.");
                     }
@@ -1518,10 +1550,11 @@
                         await saveDeviceDB(device);
                     }
                     await loadDevices();
-                    alert(`Синхронізація успішна! Завантажено ${importedDevices.length} прилад(ів).`);
+                    if (!silent) alert(`Синхронізація успішна! Завантажено ${importedDevices.length} прилад(ів).`);
+                    console.log("GitHub pull successful.");
                 } catch (error) {
                     console.error("GitHub Pull Error:", error);
-                    alert(`Помилка завантаження: ${error.message}`);
+                    if (!silent) alert(`Помилка завантаження: ${error.message}`);
                 }
             };
 
