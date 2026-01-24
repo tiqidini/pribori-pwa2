@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pribori-react-cache-v3'; // Updated cache name for icons and features
+const CACHE_NAME = 'pribori-react-cache-v4'; // Updated version to v4
 
 // List of URLs to cache.
 // Ensure these paths are correct relative to where service-worker.js is served from (usually the root).
@@ -77,6 +77,11 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   // We only want to cache GET requests.
   if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // EXCLUDE GitHub API from Service Worker handling to avoid Fetch errors with Auth headers/cache-busters
+  if (event.request.url.includes('api.github.com')) {
     return;
   }
 
