@@ -1229,7 +1229,11 @@
                     // Auto-pull from GitHub on startup
                     if (settings.githubToken && settings.githubRepo) {
                         console.log("App startup: attempting GitHub synchronization...");
-                        handleGitHubPull(settings, true);
+                        try {
+                            await handleGitHubPull(settings, true);
+                        } catch (e) {
+                            console.error("Auto-pull on startup failed:", e);
+                        }
                     }
 
                     const devs = await getAllDevicesDB();
