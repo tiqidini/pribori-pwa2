@@ -46,6 +46,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         body {
@@ -885,7 +886,7 @@
         }
 
         // SettingsModal Component
-        function SettingsModal({ onClose, settings, onSaveSettings, onGitHubPush, onGitHubPull }) {
+        function SettingsModal({ onClose, settings, onSaveSettings, onGitHubPush, onGitHubPull, onExportXLSX }) {
             const [localSettings, setLocalSettings] = useState(settings);
             const rms = ["111", "112"];
 
@@ -936,6 +937,19 @@
                         </div>
 
                         <div className="space-y-8">
+                            <section>
+                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Експорт звітності (Excel)</h3>
+                                <button
+                                    onClick={onExportXLSX}
+                                    className="w-full flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-bold py-3.5 px-4 rounded-2xl transition-all active:scale-95 border border-emerald-100"
+                                >
+                                    <i className="fas fa-file-excel"></i> Оновити 34_НДГ_1_00.xlsx
+                                </button>
+                                <p className="mt-2 text-[10px] text-slate-400 leading-tight">
+                                    Дати останньої та наступної повірок будуть оновлені в існуючому шаблоні.
+                                </p>
+                            </section>
+
                             <section>
                                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Push-сповіщення</h3>
                                 <button
@@ -1581,6 +1595,68 @@
                 }
             };
 
+            const handleExportXLSX = async () => {
+                try {
+                    // 1. Fetch original file
+                    const response = await fetch('34_НДГ_1_00.xlsx');
+                    if (!response.ok) throw new Error("Шаблон 34_НДГ_1_00.xlsx не знайдено.");
+                    const arrayBuffer = await response.arrayBuffer();
+
+                    // 2. Parse with SheetJS
+                    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+
+                    // 3. Convert to JSON to manipulate
+                    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    // 4. Update dates and RM
+                    // Assuming headers are at index 1 (line 2)
+                    const devices = await getAllDevicesDB();
+
+                    for (let i = 2; i < data.length; i++) {
+                        const row = data[i];
+                        if (!row || row.length < 5) continue;
+
+                        const serialInXlsx = String(row[4] || '').replace('№', '').trim();
+                        // Find match in our DB
+                        const match = devices.find(d => String(d.serial || '').replace('№', '').trim() === serialInXlsx);
+
+                        if (match) {
+                            // Update RM (col 1)
+                            row[1] = match.rm || row[1];
+                            // Update Last Check Date (col 5)
+                            if (match.lastCheckDate) {
+                                const d = new Date(match.lastCheckDate);
+                                row[5] = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
+                            }
+                            // Update Next Check Date (col 6)
+                            const nextCheckStr = calculateNextCheckDate(match.lastCheckDate, match.mpi);
+                            if (nextCheckStr) {
+                                const d = new Date(nextCheckStr);
+                                row[6] = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCFullYear()).slice(-2)}`;
+                            }
+                        }
+                    }
+
+                    // 5. Write back to worksheet
+                    const newWorksheet = XLSX.utils.aoa_to_sheet(data);
+
+                    // Preserve original column widths if possible (basic)
+                    if (worksheet['!cols']) newWorksheet['!cols'] = worksheet['!cols'];
+
+                    workbook.Sheets[sheetName] = newWorksheet;
+
+                    // 6. Download
+                    XLSX.writeFile(workbook, '34_НДГ_1_00_updated.xlsx');
+
+                    alert("Excel файл успішно оновлено та завантажено!");
+                } catch (error) {
+                    console.error("Excel Export Error:", error);
+                    alert(`Помилка експорту в Excel: ${error.message}`);
+                }
+            };
+
             const triggerImportFileSelect = () => {
                 if (fileInputRef.current) {
                     fileInputRef.current.click();
@@ -1682,6 +1758,7 @@
                             onSaveSettings={handleSaveSettings}
                             onGitHubPush={handleGitHubPush}
                             onGitHubPull={handleGitHubPull}
+                            onExportXLSX={handleExportXLSX}
                         />
                     )}
                 </div>
