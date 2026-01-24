@@ -1611,6 +1611,7 @@
                     // 2. Parse with SheetJS
                     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                     const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
                     // 3. Update existing worksheet directly to preserve formatting
                     const devices = await getAllDevicesDB();
                     const range = XLSX.utils.decode_range(worksheet['!ref']);
