@@ -1613,47 +1613,46 @@
                     const sheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[sheetName];
 
-                    // 3. Convert to JSON to manipulate
-                    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-                    // 4. Update dates and RM
-                    // Assuming headers are at index 1 (line 2)
+                    // 3. Update existing worksheet directly to preserve formatting
                     const devices = await getAllDevicesDB();
+                    const range = XLSX.utils.decode_range(worksheet['!ref']);
 
-                    for (let i = 2; i < data.length; i++) {
-                        const row = data[i];
-                        if (!row || row.length < 5) continue;
+                    for (let R = range.s.r + 2; R <= range.e.r; ++R) { // Start from row 3 (index 2)
+                        // Serial number is in column E (index 4)
+                        const serialCellRef = XLSX.utils.encode_cell({ r: R, c: 4 });
+                        const serialCell = worksheet[serialCellRef];
+                        if (!serialCell || !serialCell.v) continue;
 
-                        const serialInXlsx = String(row[4] || '').replace('№', '').trim();
-                        // Find match in our DB
+                        const serialInXlsx = String(serialCell.v).replace('№', '').trim();
+                        // Find match in our DB by serial number
                         const match = devices.find(d => String(d.serial || '').replace('№', '').trim() === serialInXlsx);
 
                         if (match) {
-                            // Update RM (col 1)
-                            row[1] = match.rm || row[1];
-                            // Update Last Check Date (col 5)
+                            // Update RM (Col B, index 1)
+                            const rmCellRef = XLSX.utils.encode_cell({ r: R, c: 1 });
+                            const currentRMValue = match.rm || (worksheet[rmCellRef] ? worksheet[rmCellRef].v : '');
+                            worksheet[rmCellRef] = { v: currentRMValue, t: 's' };
+
+                            // Update Last Check Date (Col F, index 5)
                             if (match.lastCheckDate) {
                                 const d = new Date(match.lastCheckDate);
-                                row[5] = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
+                                const lastCheckDateStr = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
+                                const lastCellRef = XLSX.utils.encode_cell({ r: R, c: 5 });
+                                worksheet[lastCellRef] = { v: lastCheckDateStr, t: 's' };
                             }
-                            // Update Next Check Date (col 6)
+
+                            // Update Next Check Date (Col G, index 6)
                             const nextCheckStr = calculateNextCheckDate(match.lastCheckDate, match.mpi);
                             if (nextCheckStr) {
                                 const d = new Date(nextCheckStr);
-                                row[6] = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCFullYear()).slice(-2)}`;
+                                const nextCheckDateStr = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
+                                const nextCellRef = XLSX.utils.encode_cell({ r: R, c: 6 });
+                                worksheet[nextCellRef] = { v: nextCheckDateStr, t: 's' };
                             }
                         }
                     }
 
-                    // 5. Write back to worksheet
-                    const newWorksheet = XLSX.utils.aoa_to_sheet(data);
-
-                    // Preserve original column widths if possible (basic)
-                    if (worksheet['!cols']) newWorksheet['!cols'] = worksheet['!cols'];
-
-                    workbook.Sheets[sheetName] = newWorksheet;
-
-                    // 6. Download
+                    // 4. Download (no need to create new worksheet, we modified the original)
                     XLSX.writeFile(workbook, '34_НДГ_1_00_updated.xlsx');
 
                     alert("Excel файл успішно оновлено та завантажено!");
