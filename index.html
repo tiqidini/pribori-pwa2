@@ -580,7 +580,7 @@
                     <div className="p-5 flex flex-col h-full">
                         <div className="flex justify-between items-start gap-4 mb-4">
                             <div className="flex-1 min-w-0">
-                                <h3 className="text-lg font-bold text-slate-800 mb-0.5 truncate leading-tight group-hover:text-premium-700 transition-colors" title={device.name}>
+                                <h3 className="text-lg font-bold text-slate-800 mb-0.5 line-clamp-2 leading-tight group-hover:text-premium-700 transition-colors" title={device.name}>
                                     {device.name || 'Без назви'}
                                 </h3>
                                 <p className="text-xs font-bold text-premium-600 uppercase tracking-wider mb-3 truncate" title={device.type}>
@@ -1554,8 +1554,13 @@
                 }
 
                 try {
-                    const res = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}`, {
-                        headers: { 'Authorization': `Bearer ${githubToken}` }
+                    const res = await fetch(`https://api.github.com/repos/${githubRepo}/contents/${githubPath}?t=${Date.now()}`, {
+                        headers: {
+                            'Authorization': `Bearer ${githubToken}`,
+                            'Cache-Control': 'no-cache',
+                            'Pragma': 'no-cache'
+                        },
+                        cache: 'no-store'
                     });
 
                     if (!res.ok) {
