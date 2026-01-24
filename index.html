@@ -1616,17 +1616,22 @@
                     const devices = await getAllDevicesDB();
                     const range = XLSX.utils.decode_range(worksheet['!ref']);
 
-                    // Find column indices dynamically by scanning first 10 rows
+                    // Find column indices dynamically by scanning first 20 rows
                     let serialCol = -1, lastCheckCol = -1, nextCheckCol = -1, rmCol = -1, headerRow = -1;
 
-                    for (let R = range.s.r; R <= Math.min(range.s.r + 10, range.e.r); ++R) {
+                    for (let R = range.s.r; R <= Math.min(range.s.r + 20, range.e.r); ++R) {
                         for (let C = range.s.c; C <= range.e.c; ++C) {
                             const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: C })];
                             if (!cell || !cell.v) continue;
                             const val = String(cell.v).toLowerCase();
-                            if (val.includes('заводський') || val.includes('серійний')) { serialCol = C; headerRow = R; }
-                            if (val.includes('дата остання') || val.includes('останньої')) lastCheckCol = C;
-                            if (val.includes('дата наступна') || val.includes('наступної')) nextCheckCol = C;
+
+                            // More robust search for Serial Number (handle 'завод', 'сері', '№', etc.)
+                            if (val.includes('завод') || val.includes('серій') || val.includes('серийн') || val.includes('зав. №') || (val.startsWith('№') && val.length < 5)) {
+                                serialCol = C; headerRow = R;
+                            }
+                            // More robust search for Dates (handle truncated "Дата остан", etc.)
+                            if (val.includes('остан')) lastCheckCol = C;
+                            if (val.includes('наступ')) nextCheckCol = C;
                             if (val.includes('рм') || val.includes('робоче місце')) rmCol = C;
                         }
                         if (serialCol !== -1) break; // Found headers
