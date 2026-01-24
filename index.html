@@ -1611,48 +1611,66 @@
                     // 2. Parse with SheetJS
                     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                     const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-
                     // 3. Update existing worksheet directly to preserve formatting
                     const devices = await getAllDevicesDB();
                     const range = XLSX.utils.decode_range(worksheet['!ref']);
 
-                    for (let R = range.s.r + 2; R <= range.e.r; ++R) { // Start from row 3 (index 2)
-                        // Serial number is in column E (index 4)
-                        const serialCellRef = XLSX.utils.encode_cell({ r: R, c: 4 });
+                    // Find column indices dynamically by scanning first 10 rows
+                    let serialCol = -1, lastCheckCol = -1, nextCheckCol = -1, rmCol = -1, headerRow = -1;
+
+                    for (let R = range.s.r; R <= Math.min(range.s.r + 10, range.e.r); ++R) {
+                        for (let C = range.s.c; C <= range.e.c; ++C) {
+                            const cell = worksheet[XLSX.utils.encode_cell({ r: R, c: C })];
+                            if (!cell || !cell.v) continue;
+                            const val = String(cell.v).toLowerCase();
+                            if (val.includes('заводський') || val.includes('серійний')) { serialCol = C; headerRow = R; }
+                            if (val.includes('дата остання') || val.includes('останньої')) lastCheckCol = C;
+                            if (val.includes('дата наступна') || val.includes('наступної')) nextCheckCol = C;
+                            if (val.includes('рм') || val.includes('робоче місце')) rmCol = C;
+                        }
+                        if (serialCol !== -1) break; // Found headers
+                    }
+
+                    if (serialCol === -1) throw new Error("Не вдалося знайти колонку 'Заводський номер' у шаблоні.");
+
+                    // Helper to convert JS Date to Excel Date Number
+                    const toExcelDate = (dateStr) => {
+                        const d = new Date(dateStr);
+                        return (d.getTime() - new Date(1899, 11, 30).getTime()) / (24 * 60 * 60 * 1000);
+                    };
+
+                    // 4. Mutation of cells
+                    for (let R = headerRow + 1; R <= range.e.r; ++R) {
+                        const serialCellRef = XLSX.utils.encode_cell({ r: R, c: serialCol });
                         const serialCell = worksheet[serialCellRef];
                         if (!serialCell || !serialCell.v) continue;
 
                         const serialInXlsx = String(serialCell.v).replace('№', '').trim();
-                        // Find match in our DB by serial number
                         const match = devices.find(d => String(d.serial || '').replace('№', '').trim() === serialInXlsx);
 
                         if (match) {
-                            // Update RM (Col B, index 1)
-                            const rmCellRef = XLSX.utils.encode_cell({ r: R, c: 1 });
-                            const currentRMValue = match.rm || (worksheet[rmCellRef] ? worksheet[rmCellRef].v : '');
-                            worksheet[rmCellRef] = { v: currentRMValue, t: 's' };
-
-                            // Update Last Check Date (Col F, index 5)
-                            if (match.lastCheckDate) {
-                                const d = new Date(match.lastCheckDate);
-                                const lastCheckDateStr = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
-                                const lastCellRef = XLSX.utils.encode_cell({ r: R, c: 5 });
-                                worksheet[lastCellRef] = { v: lastCheckDateStr, t: 's' };
+                            // Update RM
+                            if (rmCol !== -1) {
+                                const rmCellRef = XLSX.utils.encode_cell({ r: R, c: rmCol });
+                                worksheet[rmCellRef] = { v: match.rm || (worksheet[rmCellRef] ? worksheet[rmCellRef].v : ''), t: 's' };
                             }
-
-                            // Update Next Check Date (Col G, index 6)
-                            const nextCheckStr = calculateNextCheckDate(match.lastCheckDate, match.mpi);
-                            if (nextCheckStr) {
-                                const d = new Date(nextCheckStr);
-                                const nextCheckDateStr = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
-                                const nextCellRef = XLSX.utils.encode_cell({ r: R, c: 6 });
-                                worksheet[nextCellRef] = { v: nextCheckDateStr, t: 's' };
+                            // Update Last Check
+                            if (lastCheckCol !== -1 && match.lastCheckDate) {
+                                const lastCellRef = XLSX.utils.encode_cell({ r: R, c: lastCheckCol });
+                                worksheet[lastCellRef] = { v: toExcelDate(match.lastCheckDate), t: 'n', z: 'dd.mm.yyyy' };
+                            }
+                            // Update Next Check
+                            if (nextCheckCol !== -1) {
+                                const nextCheckStr = calculateNextCheckDate(match.lastCheckDate, match.mpi);
+                                if (nextCheckStr) {
+                                    const nextCellRef = XLSX.utils.encode_cell({ r: R, c: nextCheckCol });
+                                    worksheet[nextCellRef] = { v: toExcelDate(nextCheckStr), t: 'n', z: 'dd.mm.yyyy' };
+                                }
                             }
                         }
                     }
 
-                    // 4. Download (no need to create new worksheet, we modified the original)
+                    // 5. Download original workbook with modified worksheet
                     XLSX.writeFile(workbook, '34_НДГ_1_00_updated.xlsx');
 
                     alert("Excel файл успішно оновлено та завантажено!");
